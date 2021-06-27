@@ -19,7 +19,7 @@ from itertools import chain
 from scipy import stats
 
 from inception import InceptionClassifier
-from utils import create_parser, Configuration
+from utils import create_parser, Configuration, merge_vote
 import numpy as np
 import pandas as pd
 
@@ -211,9 +211,12 @@ class Fitter:
 # load dataset
 dataset_range = \
     (
-        0,
-        50
-        #100,
+        1024,
+        2048,
+        3072,
+        4096,
+        0
+        # 100,
         # 200,
         # 300,
         # 400,
@@ -264,20 +267,80 @@ def random_sample(series, labels, current_series, current_label, sample_length, 
     return series, labels
 
 
-def samples2tensor(train_series: List, train_labels: List) -> Tuple[Tensor, Tensor]:
-    return torch.FloatTensor(composition_list(train_series)).to(device), \
-           torch.from_numpy(flatten_list(train_labels)).to(device)
+def samples2tensor(series: List, labels: List) -> Tuple[Tensor, Tensor]:
+    return torch.FloatTensor(composition_list(series)).to(device), \
+           torch.from_numpy(flatten_list(labels)).to(device)
 
 
 # evaluate
 def precision(predictions_1hot, truths):
+    print(len(predictions_1hot))
+    print(len(truths))
     assert len(predictions_1hot) == len(truths)
     predictions = np.argmax(predictions_1hot, axis=-1)
     return np.sum(predictions == truths) / len(predictions)
 
 
-def train_func(config, reporter):
-    pass
+def load_split_data(dataset_name):
+    series_dataset = {}
+    # series_dataset[dataset_name] = {}
+    print(f"{dataset_name}".center(80, "-"))
+    print(f"Loading data".ljust(80 - 5, "."), end="", flush=True)
+    data = np.genfromtxt(f"{arguments.input_path}/0_{dataset_name}.csv", delimiter=',')
+    data = np.delete(data, 0, axis=0)
+    for i in range(10):
+        temp = stats.zscore(data[data[:, 0] == i, :])[:, 1:]
+        series_dataset[i] = temp.tolist()
+    print("Done.")
+    split = np.array([0.6, 0.2, 0.2])
+    train_series, train_labels = [], []
+    val_series, val_labels = [], []
+    test_series, test_labels = [], []
+    len_series = len(series_dataset[0][0])
+    for i in range(10):
+        current_label = i
+        current_series = series_dataset[i]
+        num_current_series = len(series_dataset[i])
+
+        split_num = (np.floor(split * num_current_series)).astype(int)
+
+        offset = 0
+        train_series.append(current_series[offset: offset + split_num[0]])
+        train_labels.append([current_label] * split_num[0])
+
+        offset += split_num[0]
+        val_series.append(current_series[offset: offset + split_num[1]])
+        val_labels.append([current_label] * split_num[1])
+
+        offset += split_num[1]
+        test_series.append(current_series[offset: offset + split_num[2]])
+        test_labels.append([current_label] * split_num[2])
+    train_series, train_labels = samples2tensor(train_series, train_labels)
+    val_series, val_labels = samples2tensor(val_series, val_labels)
+    test_series, test_labels = samples2tensor(test_series, test_labels)
+    return test_labels, test_series, train_labels, train_series, val_labels, val_series
+
+
+def ensemble_initialize_1hot(data: List, label: Tensor,
+                             curr_data: List, curr_label: Tensor) -> Tuple[List, Tensor]:
+    if data:
+        if label.equal(curr_label):
+            pass
+        else:
+            print(f"error.".center(90, '*'))
+            exit()
+    else:
+        label = curr_label
+    data.append(curr_data)
+    return data, label
+
+
+def get_prediction_1hot(data: Tensor, labels: Tensor) -> List:
+    predictions_1hot = []
+    with torch.no_grad():
+        for batch, truths in DataLoader(LabeledSeries(data, labels), batch_size=256):
+            predictions_1hot += fitter.model(batch).detach().cpu().tolist()
+    return predictions_1hot
 
 
 if __name__ == '__main__':
@@ -292,77 +355,49 @@ if __name__ == '__main__':
                                    data=0)
     results_dataset.index.name = "dataset"
 
+    train1hot = []
+    test1hot = []
     for dataset_name in dataset_range:
-        series_dataset = {}
-        # series_dataset[dataset_name] = {}
-        print(f"{dataset_name}".center(80, "-"))
 
-        print(f"Loading data".ljust(80 - 5, "."), end="", flush=True)
-        data = np.genfromtxt(f"{arguments.input_path}/{dataset_name}.csv", delimiter=',')
-        data = np.delete(data, 0, axis=0)
-        for i in range(10):
-            temp = stats.zscore(data[data[:, 0] == i, :])[:, 1:]
-            series_dataset[i] = temp.tolist()
-        print("Done.")
+        if dataset_name != 0:
 
-        split = np.array([0.6, 0.2, 0.2])
-        train_series, train_labels = [], []
-        val_series, val_labels = [], []
-        test_series, test_labels = [], []
-        len_series = len(series_dataset[0][0])
+            test_labels, test_series, train_labels, train_series, val_labels, val_series = load_split_data(dataset_name)
 
-        for i in range(10):
-            current_label = i
-            current_series = series_dataset[i]
-            num_current_series = len(series_dataset[i])
+            # train InceptionTime
+            checkpoint_folderpath = './results'
+            early_stop_tracebacks = 10
 
-            split_num = (np.floor(split*num_current_series)).astype(int)
+            conf = Configuration()
+            fitter = Fitter(conf, (train_series, train_labels), (val_series, val_labels))
+            fitter.fit()
 
-            offset = 0
-            train_series.append(current_series[offset: offset + split_num[0]])
-            train_labels.append([current_label] * split_num[0])
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-            offset += split_num[0]
-            val_series.append(current_series[offset: offset + split_num[1]])
-            val_labels.append([current_label] * split_num[1])
+            train_predictions_1hot = get_prediction_1hot(train_series, train_labels)
 
-            offset += split_num[1]
-            test_series.append(current_series[offset: offset + split_num[2]])
-            test_labels.append([current_label] * split_num[2])
+            test_predictions_1hot = get_prediction_1hot(val_series, val_labels)
 
-        train_series, train_labels = samples2tensor(train_series, train_labels)
-        val_series, val_labels = samples2tensor(val_series, val_labels)
-        test_series, test_labels = samples2tensor(test_series, test_labels)
+            test_predictions_1hot += get_prediction_1hot(test_series, test_labels)
 
-        # train InceptionTime
-        checkpoint_folderpath = './results'
-        early_stop_tracebacks = 5
+            trainlabel1hot = train_labels
+            train1hot, trainlabel1hot = ensemble_initialize_1hot(train1hot, trainlabel1hot, train_predictions_1hot, train_labels)
 
-        conf = Configuration()
-        fitter = Fitter(conf, (train_series, train_labels), (val_series, val_labels))
-        fitter.fit()
+            print(precision(train_predictions_1hot, train_labels.cpu().numpy()))
+            results_dataset.loc[dataset_name, "accuracy_train"] = precision(train_predictions_1hot, train_labels.cpu().numpy())
 
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+            testlabel1hot = torch.cat((val_labels, test_labels), 0)
+            test1hot, testlabel1hot = ensemble_initialize_1hot(test1hot, testlabel1hot, test_predictions_1hot, torch.cat((val_labels, test_labels), 0))
 
-        train_predictions_1hot = []
-        with torch.no_grad():
-            for batch, truths in DataLoader(LabeledSeries(train_series, train_labels), batch_size=256):
-                train_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
+            print(precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist())))
+            results_dataset.loc[dataset_name, "accuracy_test"] = precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist()))
+        else:
+            final_1hot = merge_vote(np.array(train1hot))
+            results_dataset.loc[dataset_name, "accuracy_train"] = precision(final_1hot, trainlabel1hot.cpu().numpy())
 
-        print(precision(train_predictions_1hot, train_labels.cpu().numpy()))
-        results_dataset.loc[dataset_name, "accuracy_train"] = precision(train_predictions_1hot, train_labels.cpu().numpy())
+            final_test_1hot = merge_vote(np.array(test1hot))
+            results_dataset.loc[dataset_name, "accuracy_test"] = precision(final_test_1hot, testlabel1hot.cpu().numpy())
 
-        test_predictions_1hot = []
-        with torch.no_grad():
-            for batch, truths in DataLoader(LabeledSeries(val_series, val_labels), batch_size=256):
-                test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
-
-            for batch, truths in DataLoader(LabeledSeries(test_series, test_labels), batch_size=256):
-                test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
-
-        print(precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist())))
-        results_dataset.loc[dataset_name, "accuracy_test"] = precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist()))
     print(f"FINISHED".center(80, "="))
     results_dataset.to_csv(f"{arguments.output_path}/results_dataset.csv")
 

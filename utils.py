@@ -185,3 +185,88 @@ class TanhAdjusted(nn.Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return self.a * tanh(self.b * input)
+
+
+def create_1hot(index: int, length: int) -> np.array:
+    """
+
+    :param index: one hot position in the array
+    :param length: the length of the array
+    :return: 1D array
+    """
+    temp = np.zeros(length)
+    temp[index] = 1
+    return temp
+
+
+def create_1hot_2d(input_array: np.array, length: int) -> np.array:
+    """
+
+    :param input_array: 2D array
+    :param length: the length of the hot vector
+    :return:
+    """
+    output_array = np.zeros((len(input_array), length))
+    print(f"input for create_1hot_2d: {input_array}")
+    for i in range(len(input_array)):
+        output_array[i] = create_1hot(input_array[i], length)
+    return output_array
+
+
+def one_hot2array(input_array: np.array) -> np.array:
+    """
+
+    :param input_array: 1D array
+    :return: the index of the one hot in the array
+    """
+    # np.squeeze(np.where(input_array == 1))
+    return np.argmax(input_array)
+
+
+def one_hot2d2array(input_array: np.array) -> np.array:
+    """
+
+    :param input_array: 2D array of the one hot
+    :return:
+    """
+    rows, cols = input_array.shape
+    output_array = np.zeros(rows)
+    print(f"input for one_hot2d2array: {input_array.shape}")
+    for i in range(rows):
+        if type(input_array[i]) is np.ndarray:
+            # print(input_array[i])
+            # print(input_array[i].dtype)
+            output_array[i] = one_hot2array(input_array[i])
+        else:
+            output_array[i] = one_hot2array(np.array(input_array[i]))
+    return output_array
+
+
+def one_hot_3d2array(input_array: np.array) -> np.array:
+    """
+
+    :param input_array: 3D the array of the one hot vector
+    :return:
+    """
+    dim1, dim2, dim3 = input_array.shape
+    output_array = np.zeros((dim1, dim2))
+    print(f"one_hot_3d2array".center(60, '*'))
+    print(input_array[0].shape)
+    for i in range(dim1):
+        output_array[i] = one_hot2d2array(input_array[i])
+    return output_array.astype(np.int64)
+
+
+def merge_vote(one_hot_array: np.array) -> np.array:
+    """
+
+    :param one_hot_array: 3d array of the hot vector
+    :return:
+    """
+    list_ensemble = []
+    input_array = one_hot_3d2array(one_hot_array)
+    rows, cols = input_array.shape
+    for row in range(cols):
+        d = np.argmax(np.bincount(input_array[:, row].T))
+        list_ensemble.append(d)
+    return create_1hot_2d(np.array(list_ensemble), one_hot_array.shape[2])
