@@ -87,8 +87,8 @@ class Fitter:
             self.train_losses.append(train_loss)
             self.val_losses.append(val_loss)
 
-            if len(self.train_losses) > early_stop_tracebacks and train_loss > np.mean(
-                    self.train_losses[-1 - early_stop_tracebacks: -1]) + 1e-4:
+            if len(self.train_losses) > early_stop_tracebacks \
+                    and train_loss > np.mean(self.train_losses[-1 - early_stop_tracebacks: -1]) + 1e-4:
                 break
 
         checkpoint_filename = '-'.join([
@@ -100,22 +100,17 @@ class Fitter:
 
     def __train(self):
         local_losses = []
-
         for batch, truths in self.train_dataloader:
             self.optimizer.zero_grad()
-
             predictions = self.model(batch)
-
             loss = self.lossf(predictions, truths)
-
             loss.backward()
             self.optimizer.step()
-
             local_losses.append(loss.detach().item())
 
         train_loss = np.mean(local_losses)
-        local_losses = []
 
+        local_losses = []
         with torch.no_grad():
             for batch, truths in self.val_dataloader:
                 predictions = self.model(batch)
