@@ -5,20 +5,17 @@
 # @File    : inception.py
 # @Software: PyCharm
 from collections import OrderedDict
-from token import EQUAL
 
 import torch
 import torch.nn as nn
 import numpy as np
-from torch import Tensor, tanh
-from utils import Configuration
+from torch import Tensor
 
 
 # define InceptionTime
 
+from Utils.configuration import Configuration
 
-
-# %%
 
 class Reshape(nn.Module):
     def __init__(self, shape):
@@ -28,8 +25,6 @@ class Reshape(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return input.view(self.shape)
 
-
-# %%
 
 class Squeeze(nn.Module):
     def __init__(self, dim=None):
@@ -42,8 +37,6 @@ class Squeeze(nn.Module):
         else:
             return input.squeeze(dim=self.dim)
 
-
-# %%
 
 class _InceptionLayer(nn.Module):
     def __init__(self, kernel_size: int, in_channels: int, out_channels: int, dilation: int = 1):
@@ -64,8 +57,6 @@ class _InceptionLayer(nn.Module):
 
         return self.__convolution(input)
 
-
-# %%
 
 class _InceptionBlock(nn.ModuleDict):
     def __init__(self, conf: Configuration, in_channels: int, out_channels: int, to_encode: bool):
@@ -110,8 +101,6 @@ class _InceptionBlock(nn.ModuleDict):
         return self.__finalize(latent)
 
 
-# %%
-
 class _InceptionNet(nn.Module):
     def __init__(self, conf: Configuration, to_encode: bool = True):
         super(_InceptionNet, self).__init__()
@@ -131,8 +120,6 @@ class _InceptionNet(nn.Module):
     def forward(self, input: Tensor) -> Tensor:
         return self.__model(input)
 
-
-# %%
 
 class InceptionClassifier(nn.Module):
     def __init__(self, conf: Configuration):
