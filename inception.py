@@ -14,7 +14,7 @@ from torch import Tensor
 
 # define InceptionTime
 
-from Utils.configuration import Configuration
+from Utils.Configuration import Configuration
 
 
 class Reshape(nn.Module):

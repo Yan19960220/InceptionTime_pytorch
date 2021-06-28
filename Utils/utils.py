@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 import numpy as np
 import torch
@@ -8,7 +8,6 @@ from torch import nn, Tensor
 
 len_1hot = 10
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 
 data_index = {
     'Air_Compressor': 0,
@@ -34,17 +33,34 @@ def create_parser():
     return parser.parse_args()
 
 
-def check_if_file_exits(file_name):
+def check_if_file_exits(file_name: str) -> bool:
+    """
+
+    :param file_name:
+    :return:
+    """
     return os.path.exists(file_name)
 
 
-def read_ucr(filename, delimiter=','):
+def read_ucr(filename: str,
+             delimiter: str = ',') -> Tuple[np.array, np.array]:
+    """
+
+    :param filename:
+    :param delimiter:
+    :return:
+    """
     data = np.loadtxt(filename)
     Y, X = data[:, 0].astype(np.int), data[:, 1:]
     return X, Y
 
 
-def create_directory(directory_path):
+def create_directory(directory_path: str):
+    """
+
+    :param directory_path:
+    :return:
+    """
     if os.path.exists(directory_path):
         return None
     else:
@@ -56,7 +72,9 @@ def create_directory(directory_path):
         return directory_path
 
 
-def read_dataset(root_dir, archive_name, dataset_name):
+def read_dataset(root_dir: str,
+                 archive_name: str,
+                 dataset_name: str) -> Dict:
     datasets_dict = {}
 
     file_name = root_dir + '/archives/' + archive_name + '/' + dataset_name + '/' + dataset_name
@@ -69,6 +87,11 @@ def read_dataset(root_dir, archive_name, dataset_name):
 
 
 def z_normalize(values: np.ndarray) -> np.ndarray:
+    """
+
+    :param values:
+    :return:
+    """
     mean = np.mean(values)
     std = np.std(values)
     epsilon = 1e-20
@@ -77,6 +100,11 @@ def z_normalize(values: np.ndarray) -> np.ndarray:
 
 
 def read_txt(file_path: str) -> np.ndarray:
+    """
+
+    :param file_path: the path of the file
+    :return:
+    """
     assert os.path.isfile(file_path)
 
     buffer = []
@@ -173,7 +201,12 @@ def merge_vote(one_hot_array: np.array) -> np.array:
     return create_1hot_2d(np.array(list_ensemble), one_hot_array.shape[2])
 
 
-def flatten_list(labels):
+def flatten_list(labels: List) -> np.array:
+    """
+
+    :param labels:
+    :return:
+    """
     empty_list = []
     for i in labels:
         if isinstance(i, int):
@@ -183,7 +216,12 @@ def flatten_list(labels):
     return np.array(empty_list)
 
 
-def composition_list(train_series):
+def composition_list(train_series: List) -> np.array:
+    """
+
+    :param train_series:
+    :return:
+    """
     empty_list = []
     for i in train_series:
         for j in i:
@@ -192,6 +230,13 @@ def composition_list(train_series):
     return np.array(empty_list)
 
 
-def samples2tensor(series: List, labels: List) -> Tuple[Tensor, Tensor]:
+def samples2tensor(series: List,
+                   labels: List) -> Tuple[Tensor, Tensor]:
+    """
+
+    :param series:
+    :param labels:
+    :return:
+    """
     return torch.FloatTensor(composition_list(series)).to(device), \
            torch.from_numpy(flatten_list(labels)).to(device)

@@ -4,7 +4,7 @@ import numpy as np
 from torch import optim, nn
 
 from Utils.Configuration import Configuration
-from Utils.labeledSeries import LabeledSeries
+from Utils.LabeledSeries import LabeledSeries
 from Utils.utils import device
 from inception import InceptionClassifier
 from torch.utils.data import DataLoader

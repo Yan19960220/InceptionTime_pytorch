@@ -13,9 +13,9 @@
 from typing import List, Tuple
 from scipy import stats
 
-from Utils.configuration import Configuration
-from Utils.fitter import Fitter
-from Utils.labeledSeries import LabeledSeries
+from Utils.Configuration import Configuration
+from Utils.Fitter import Fitter
+from Utils.LabeledSeries import LabeledSeries
 from Utils.utils import create_parser, merge_vote, samples2tensor
 import numpy as np
 import pandas as pd
@@ -30,7 +30,7 @@ dataset_range = \
         1024,
         2048,
         3072,
-        4096,
+        # 4096,
         0
     )
 
@@ -65,7 +65,7 @@ def load_split_data(dataset_name: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, 
     series_dataset = {}
     print(f"{dataset_name}".center(80, "-"))
     print(f"Loading data".ljust(80 - 5, "."), end="", flush=True)
-    data = np.genfromtxt(f"{arguments.input_path}/0_{dataset_name}.csv", delimiter=',')
+    data = np.genfromtxt(f"{arguments.input_path}/0_{dataset_name}.csv", delimiter=',', invalid_raise=False)
     data = np.delete(data, 0, axis=0)
     for i in range(10):
         temp = stats.zscore(data[data[:, 0] == i, :])[:, 1:]
@@ -162,16 +162,20 @@ if __name__ == '__main__':
             test_predictions_1hot += get_prediction_1hot(test_series, test_labels)
 
             trainlabel1hot = train_labels
-            train1hot, trainlabel1hot = ensemble_initialize_1hot(train1hot, trainlabel1hot, train_predictions_1hot, train_labels)
+            train1hot, trainlabel1hot = ensemble_initialize_1hot(train1hot, trainlabel1hot, train_predictions_1hot,
+                                                                 train_labels)
 
             print(precision(train_predictions_1hot, train_labels.cpu().numpy()))
-            results_dataset.loc[dataset_name, "accuracy_train"] = precision(train_predictions_1hot, train_labels.cpu().numpy())
+            results_dataset.loc[dataset_name, "accuracy_train"] = precision(train_predictions_1hot,
+                                                                            train_labels.cpu().numpy())
 
             testlabel1hot = torch.cat((val_labels, test_labels), 0)
-            test1hot, testlabel1hot = ensemble_initialize_1hot(test1hot, testlabel1hot, test_predictions_1hot, torch.cat((val_labels, test_labels), 0))
+            test1hot, testlabel1hot = ensemble_initialize_1hot(test1hot, testlabel1hot, test_predictions_1hot,
+                                                               torch.cat((val_labels, test_labels), 0))
 
             print(precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist())))
-            results_dataset.loc[dataset_name, "accuracy_test"] = precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist()))
+            results_dataset.loc[dataset_name, "accuracy_test"] = precision(test_predictions_1hot, np.array(
+                val_labels.cpu().tolist() + test_labels.cpu().tolist()))
         else:
             final_1hot = merge_vote(np.array(train1hot))
             results_dataset.loc[dataset_name, "accuracy_train"] = precision(final_1hot, trainlabel1hot.cpu().numpy())
@@ -182,69 +186,69 @@ if __name__ == '__main__':
     print(f"FINISHED".center(80, "="))
     results_dataset.to_csv(f"{arguments.output_path}/results_dataset.csv")
 
-        # # split
-        # sampling_rate = int(173.61)
-        #
-        # # subsequence_length = int(sampling_rate)
-        # subsequence_length = int(sampling_rate * 2)
-        # # subsequence_length = int(sampling_rate * 4)
-        # print(f"subsequence_length: - {subsequence_length}")
-        # max_overlapping_length = int(subsequence_length / 2)
-        #
-        # train_series, train_labels = [], []
-        # val_series, val_labels = [], []
-        # test_series, test_labels = [], []
-        #
-        # split = np.array([0.6, 0.2, 0.2])
-        #
-        # for class_name in range(10):
-        #     current_label = class_name
-        #     current_series = series_dataset[class_name]
-        #     split_num = (np.floor(split*len(current_series))).astype(int)
-        #     # print(f"split_num[0]: - {split_num[0]}")
-        #     offset = 0
-        #     train_series, train_labels = random_sample(train_series, train_labels, current_series, current_label, subsequence_length,
-        #                                            max_overlapping_length, split_num[0], offset)
-        #
-        #     offset += split_num[0]
-        #     val_series, val_labels = random_sample(val_series, val_labels, current_series, current_label, subsequence_length,
-        #                                            max_overlapping_length, split_num[1], offset)
-        #
-        #     offset += split_num[1]
-        #     test_series, test_labels = random_sample(test_series, test_labels, current_series, current_label, subsequence_length,
-        #                                            max_overlapping_length, split_num[2], offset)
-        #
-        # train_series, train_labels = samples2tensor(train_series, train_labels)
-        # val_series, val_labels = samples2tensor(val_series, val_labels)
-        # test_series, test_labels = samples2tensor(test_series, test_labels)
-        #
-        # ## train InceptionTime
-        # conf = Configuration()
-        # conf.setHP('inception_kernel_sizes', [1, 5, 9, 17])
-        #
-        # fitter = Fitter(conf, (train_series, train_labels), (val_series, val_labels))
-        # fitter.fit()
-        #
-        # if torch.cuda.is_available():
-        #     torch.cuda.empty_cache()
-        #
-        # # evaluate
-        # train_predictions_1hot = []
-        #
-        # with torch.no_grad():
-        #     for batch, truths in DataLoader(LabeledSeries(train_series, train_labels), batch_size=256):
-        #         train_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
-        #
-        # print(precision(train_predictions_1hot, train_labels.cpu().numpy()))
-        #
-        # # %%
-        #
-        # test_predictions_1hot = []
-        # with torch.no_grad():
-        #     for batch, truths in DataLoader(LabeledSeries(val_series, val_labels), batch_size=256):
-        #         test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
-        #
-        #     for batch, truths in DataLoader(LabeledSeries(test_series, test_labels), batch_size=256):
-        #         test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
-        #
-        # print(precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist())))
+    # # split
+    # sampling_rate = int(173.61)
+    #
+    # # subsequence_length = int(sampling_rate)
+    # subsequence_length = int(sampling_rate * 2)
+    # # subsequence_length = int(sampling_rate * 4)
+    # print(f"subsequence_length: - {subsequence_length}")
+    # max_overlapping_length = int(subsequence_length / 2)
+    #
+    # train_series, train_labels = [], []
+    # val_series, val_labels = [], []
+    # test_series, test_labels = [], []
+    #
+    # split = np.array([0.6, 0.2, 0.2])
+    #
+    # for class_name in range(10):
+    #     current_label = class_name
+    #     current_series = series_dataset[class_name]
+    #     split_num = (np.floor(split*len(current_series))).astype(int)
+    #     # print(f"split_num[0]: - {split_num[0]}")
+    #     offset = 0
+    #     train_series, train_labels = random_sample(train_series, train_labels, current_series, current_label, subsequence_length,
+    #                                            max_overlapping_length, split_num[0], offset)
+    #
+    #     offset += split_num[0]
+    #     val_series, val_labels = random_sample(val_series, val_labels, current_series, current_label, subsequence_length,
+    #                                            max_overlapping_length, split_num[1], offset)
+    #
+    #     offset += split_num[1]
+    #     test_series, test_labels = random_sample(test_series, test_labels, current_series, current_label, subsequence_length,
+    #                                            max_overlapping_length, split_num[2], offset)
+    #
+    # train_series, train_labels = samples2tensor(train_series, train_labels)
+    # val_series, val_labels = samples2tensor(val_series, val_labels)
+    # test_series, test_labels = samples2tensor(test_series, test_labels)
+    #
+    # ## train InceptionTime
+    # conf = Configuration()
+    # conf.setHP('inception_kernel_sizes', [1, 5, 9, 17])
+    #
+    # fitter = Fitter(conf, (train_series, train_labels), (val_series, val_labels))
+    # fitter.fit()
+    #
+    # if torch.cuda.is_available():
+    #     torch.cuda.empty_cache()
+    #
+    # # evaluate
+    # train_predictions_1hot = []
+    #
+    # with torch.no_grad():
+    #     for batch, truths in DataLoader(LabeledSeries(train_series, train_labels), batch_size=256):
+    #         train_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
+    #
+    # print(precision(train_predictions_1hot, train_labels.cpu().numpy()))
+    #
+    # # %%
+    #
+    # test_predictions_1hot = []
+    # with torch.no_grad():
+    #     for batch, truths in DataLoader(LabeledSeries(val_series, val_labels), batch_size=256):
+    #         test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
+    #
+    #     for batch, truths in DataLoader(LabeledSeries(test_series, test_labels), batch_size=256):
+    #         test_predictions_1hot += fitter.model(batch).detach().cpu().tolist()
+    #
+    # print(precision(test_predictions_1hot, np.array(val_labels.cpu().tolist() + test_labels.cpu().tolist())))
