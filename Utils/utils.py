@@ -240,3 +240,13 @@ def samples2tensor(series: List,
     """
     return torch.FloatTensor(composition_list(series)).to(device), \
            torch.from_numpy(flatten_list(labels)).to(device)
+
+
+def get_bandpass_width(a_list: List) -> np.float64:
+    """
+    get the width of the list value range
+
+    :param a_list:
+    :return:
+    """
+    return max(a_list) - min(a_list)

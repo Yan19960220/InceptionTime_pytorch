@@ -87,7 +87,7 @@ class Configuration():
 
             'device': device,
 
-            'checkpoint_folderpath': './results',
+            'checkpoint_folder_path': './results/checkpoint',
 
             'early_stop_tracebacks': 5,
 
@@ -95,7 +95,11 @@ class Configuration():
 
             'verbose': True,
 
-            'factor': 0.5
+            'factor': 0.5,
+
+            'step_size': 25,
+
+            'gamma': 0.1
         }
 
         self.settings = {}

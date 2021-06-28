@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 
 dataset_range = \
     (
-        1024,
+        # 1024,
         2048,
         3072,
         # 4096,
@@ -62,6 +62,11 @@ def precision(predictions_1hot: List,
 
 
 def load_split_data(dataset_name: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    """
+
+    :param dataset_name:
+    :return:
+    """
     series_dataset = {}
     print(f"{dataset_name}".center(80, "-"))
     print(f"Loading data".ljust(80 - 5, "."), end="", flush=True)
@@ -102,6 +107,14 @@ def load_split_data(dataset_name: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, 
 
 def ensemble_initialize_1hot(data: List, label: Tensor,
                              curr_data: List, curr_label: Tensor) -> Tuple[List, Tensor]:
+    """
+
+    :param data:
+    :param label:
+    :param curr_data:
+    :param curr_label:
+    :return:
+    """
     if data:
         if label.equal(curr_label):
             pass
@@ -116,6 +129,12 @@ def ensemble_initialize_1hot(data: List, label: Tensor,
 
 def get_prediction_1hot(data: Tensor,
                         labels: Tensor) -> List:
+    """
+
+    :param data:
+    :param labels:
+    :return:
+    """
     predictions_1hot = []
     with torch.no_grad():
         for batch, truths in DataLoader(LabeledSeries(data, labels), batch_size=256):

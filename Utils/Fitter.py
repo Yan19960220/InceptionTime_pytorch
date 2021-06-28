@@ -1,12 +1,13 @@
 import os
+from typing import List
 
 import numpy as np
 from torch import optim, nn
 
 from Utils.Configuration import Configuration
 from Utils.LabeledSeries import LabeledSeries
-from Utils.utils import device
-from inception import InceptionClassifier
+from Utils.utils import device, get_bandpass_width
+from classifiers.inception import InceptionClassifier
 from torch.utils.data import DataLoader
 from timeit import default_timer as timer
 import torch
@@ -28,40 +29,54 @@ class Fitter:
 
         self.model = InceptionClassifier(conf).to(device)
         self.optimizer = self.__getOptimizer()
-        self.scheduler = self.__getScheduler(self.optimizer)
+        self.scheduler = self.__getScheduler()
+        self.scheduler_exp = self.__getExpScheduler()
 
         self.lossf = nn.CrossEntropyLoss().to(device)
         self.train_losses = []
         self.val_losses = []
 
+        self.delta = 1e-4
+
     def fit(self):
-        early_stop_tracebacks = self.__conf.getHP('early_stop_tracebacks')
-        checkpoint_folderpath = self.__conf.getHP('checkpoint_folderpath')
 
         while self.epoch < self.max_epoch:
             start = timer()
 
-            self.__adjust_lr()
+            curr_lr = self.__adjust_lr()
             self.__adjust_wd()
             self.epoch += 1
 
             train_loss, val_loss = self.__train()
 
             duration = timer() - start
-            print('train {:d} in {:.3f}s = {:.4f}'.format(self.epoch, duration, train_loss))
-            print('val {:d} in {:.3f}s = {:.4f}'.format(self.epoch, duration, val_loss))
+            print(f"train {self.epoch} in {duration}s = {train_loss}")
+            print(f"test {self.epoch} in {duration}s = {val_loss}")
+            print(f"learning rate: {curr_lr}")
 
             self.train_losses.append(train_loss)
             self.val_losses.append(val_loss)
 
-            self.scheduler.step(sum(self.train_losses) / len(self.train_losses))
-            if len(self.train_losses) > early_stop_tracebacks and \
-                    train_loss > np.mean(self.train_losses[-1 - early_stop_tracebacks: -1]) + 1e-4:
-                checkpoint_filename = '-'.join([
-                    'FIT',
-                    str(self.epoch)
-                ]) + '.pickle'
-                torch.save(self.model.state_dict(), os.path.join(checkpoint_folderpath, checkpoint_filename))
+            # self.scheduler_exp.step()
+            # self.scheduler.step()
+
+            early_stop_tracebacks = self.__conf.getHP('early_stop_tracebacks')
+            if len(self.train_losses) > early_stop_tracebacks:
+                def get_window(losses_list: List,
+                               width: int) -> List:
+                    return losses_list[-1 - width: -1]
+                loss_window = get_window(self.train_losses, 3)
+                if get_bandpass_width(loss_window) < self.delta*10:
+                    if train_loss > np.mean(get_window(self.train_losses, early_stop_tracebacks)) + self.delta:
+                        print(f"Early stop at the epoch: {self.epoch}".center(50, '*'))
+                        break
+
+        checkpoint_folder_path = self.__conf.getHP('checkpoint_folder_path')
+        checkpoint_filename = '-'.join([
+            'FIT',
+            str(self.epoch)
+        ]) + '.pickle'
+        torch.save(self.model.state_dict(), os.path.join(checkpoint_folder_path, checkpoint_filename))
 
     def __train(self):
         ###################
@@ -92,10 +107,19 @@ class Fitter:
 
         return train_loss, val_loss
 
-    def __getScheduler(self, optimizer) -> optim.lr_scheduler:
-        return optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.__conf.getHP('factor'),
-                                                    patience=self.__conf.getHP('patience'),
-                                                    verbose=self.__conf.getHP('verbose'))
+    def __getScheduler(self) -> optim.lr_scheduler:
+        # return optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=self.__conf.getHP('factor'),
+        #                                             patience=self.__conf.getHP('patience'),
+        #                                             verbose=self.__conf.getHP('verbose'))
+        # lr_max = self.__conf.getHP('lr_max')
+        # lr_min = self.__conf.getHP('lr_min')
+        # lambda1 = lambda epoch: lr_max - epoch * (lr_max - lr_min) / self.max_epoch
+        # return optim.lr_scheduler.LambdaLR(self.optimizer, lambda1)
+        return torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=self.__conf.getHP('step_size'),
+                                               gamma=self.__conf.getHP('gamma'))
+
+    def __getExpScheduler(self) -> optim.lr_scheduler:
+        return optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.9)
 
     def __getOptimizer(self) -> optim.Optimizer:
         if self.__conf.getHP('optim_type') == 'sgd':
@@ -116,7 +140,7 @@ class Fitter:
 
         raise ValueError('cannot obtain optimizer')
 
-    def __adjust_lr(self) -> None:
+    def __adjust_lr(self) -> np.float64:
         # should be based on self.epoch and hyperparameters ONLY for easily resumming
 
         for param_group in self.optimizer.param_groups:
@@ -157,6 +181,8 @@ class Fitter:
 
         for param_group in self.optimizer.param_groups:
             param_group['lr'] = new_lr
+
+        return new_lr
 
     def __adjust_wd(self):
         # should be based on self.epoch and hyperparameters ONLY for easily resumming
