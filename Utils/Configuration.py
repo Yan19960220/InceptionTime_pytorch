@@ -89,7 +89,7 @@ class Configuration():
 
             'checkpoint_folder_path': './results/checkpoint',
 
-            'early_stop_tracebacks': 5,
+            'early_stop_tracebacks': 10,
 
             'patience': 5,
 

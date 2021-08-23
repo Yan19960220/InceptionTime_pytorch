@@ -17,6 +17,7 @@ from Utils.Configuration import Configuration
 from Utils.Fitter import Fitter
 from Utils.LabeledSeries import LabeledSeries
 from Utils.utils import create_parser, merge_vote, samples2tensor
+from Utils.Data_process import Data_Process
 import numpy as np
 import pandas as pd
 
@@ -27,10 +28,10 @@ from torch.utils.data import DataLoader
 
 dataset_range = \
     (
-        # 1024,
-        2048,
-        3072,
-        # 4096,
+        1024,
+        # 2048,
+        # 3072,
+        4096,
         0
     )
 
@@ -59,6 +60,11 @@ def precision(predictions_1hot: List,
     assert len(predictions_1hot) == len(truths)
     predictions = np.argmax(predictions_1hot, axis=-1)
     return np.sum(predictions == truths) / len(predictions)
+
+
+def filter_snr(_filter: Data_Process, series: List, labels: List, threshold: float)\
+        -> (List, List):
+    return _filter._filter_snr_with_labels(series, labels, threshold)
 
 
 def load_split_data(dataset_name: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
@@ -99,6 +105,17 @@ def load_split_data(dataset_name: int) -> Tuple[Tensor, Tensor, Tensor, Tensor, 
         offset += split_num[1]
         test_series.append(current_series[offset: offset + split_num[2]])
         test_labels.append([current_label] * split_num[2])
+
+    data_pro = Data_Process(name='filter_snr_label')
+    train_series, train_labels = data_pro.build_filters(train_series, train_labels, 0.9)
+    val_series, val_labels = data_pro.build_filters(val_series, val_labels, 0.9)
+    test_series, test_labels = data_pro.build_filters(test_series, test_labels, 0.9)
+
+    data_pro.set_type('whiten')
+    train_series, train_labels = data_pro.build_filters(train_series, train_labels)
+    val_series, val_labels = data_pro.build_filters(val_series, val_labels)
+    test_series, test_labels = data_pro.build_filters(test_series, test_labels)
+
     train_series, train_labels = samples2tensor(train_series, train_labels)
     val_series, val_labels = samples2tensor(val_series, val_labels)
     test_series, test_labels = samples2tensor(test_series, test_labels)

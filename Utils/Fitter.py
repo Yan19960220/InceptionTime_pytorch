@@ -65,11 +65,15 @@ class Fitter:
                 def get_window(losses_list: List,
                                width: int) -> List:
                     return losses_list[-1 - width: -1]
-                loss_window = get_window(self.train_losses, 3)
-                if get_bandpass_width(loss_window) < self.delta*10:
-                    if train_loss > np.mean(get_window(self.train_losses, early_stop_tracebacks)) + self.delta:
+                loss_window = get_window(self.train_losses, early_stop_tracebacks)
+                fault_tolerant = get_bandpass_width(loss_window)
+                print(f"Epoch {self.epoch}: fault_tolerant - {fault_tolerant}")
+                if fault_tolerant < self.delta*50:
+                    if train_loss > np.mean(loss_window) + self.delta:
                         print(f"Early stop at the epoch: {self.epoch}".center(50, '*'))
                         break
+                    else:
+                        print(f"It's a pity. not the concave".ljust(40, '*'))
 
         checkpoint_folder_path = self.__conf.getHP('checkpoint_folder_path')
         checkpoint_filename = '-'.join([
